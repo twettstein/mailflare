@@ -55,6 +55,7 @@ interface CloudflareEnv {
 	B2_APPLICATION_KEY?: string;
 	B2_BUCKET?: string;
 	B2_ENDPOINT?: string;
+	B2_REGION?: string; // This is an optional flag unless you use a S3 bucket that isn
 	/**
 	 * AWS S3 storage, used when B2 is not configured. Credentials fall back to AWS_ACCESS_KEY_ID /
 	 * AWS_SECRET_ACCESS_KEY (read from the environment), so an existing SES key can serve both.

@@ -1,6 +1,6 @@
 import type { B2Config, StorageStatus } from "@/lib/storage/b2-types";
 
-type B2Env = Partial<Pick<CloudflareEnv, "B2_KEY_ID" | "B2_APPLICATION_KEY" | "B2_BUCKET" | "B2_ENDPOINT" | "S3_BUCKET" | "S3_REGION" | "S3_ACCESS_KEY_ID" | "S3_SECRET_ACCESS_KEY" | "MAILFLARE_RUNTIME">> &
+type B2Env = Partial<Pick<CloudflareEnv, "B2_KEY_ID" | "B2_APPLICATION_KEY" | "B2_BUCKET" | "B2_ENDPOINT" | "B2_REGION" | "S3_BUCKET" | "S3_REGION" | "S3_ACCESS_KEY_ID" | "S3_SECRET_ACCESS_KEY" | "MAILFLARE_RUNTIME">> &
 	Partial<Record<"AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY" | "AWS_REGION" | "AWS_DEFAULT_REGION", string>>;
 
 const ENDPOINT_PATTERN = /^s3\.([a-z0-9-]+)\.backblazeb2\.com$/;
@@ -10,7 +10,13 @@ export function normalizeB2Endpoint(value: string): string {
 	return value.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
 }
 
-export function b2RegionFromEndpoint(endpoint: string): string | null {
+export function b2RegionFromEndpoint(env: B2Env, endpoint: string): string | null {
+	const region = env.B2_REGION?.trim();
+	
+	if (region) {
+		return region;
+	}
+	
 	return ENDPOINT_PATTERN.exec(endpoint)?.[1] ?? null;
 }
 
@@ -24,7 +30,7 @@ export function getB2Config(env: B2Env): B2Config | null {
 	const bucket = env.B2_BUCKET?.trim();
 	const endpoint = env.B2_ENDPOINT ? normalizeB2Endpoint(env.B2_ENDPOINT) : "";
 	if (!keyId || !applicationKey || !bucket || !endpoint) return null;
-	const region = b2RegionFromEndpoint(endpoint);
+	const region = b2RegionFromEndpoint(env, endpoint);
 	if (!region) return null;
 	return { keyId, applicationKey, bucket, endpoint, region };
 }

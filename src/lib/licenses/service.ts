@@ -1,11 +1,8 @@
 import { eq } from "drizzle-orm";
-import packageJson from "../../../package.json";
 import { getDb } from "@/db";
 import { licenseSettings } from "@/db/schema";
-import { LICENSE_PRODUCT_IDS } from "./constants";
-import { callPaymugLicenseApi } from "./paymug";
 import type { LicenseEntitlements, LicensePlan, LicenseStatus, PaymugLicenseAction } from "./types";
-import { hashLicenseKey, normalizeLicensePlan, parseFeatures } from "./utils";
+import { hashLicenseKey, parseFeatures } from "./utils";
 
 const LICENSE_SETTINGS_ID = "default";
 
@@ -30,6 +27,17 @@ async function getOrCreateLicenseSettings(env: CloudflareEnv) {
 		.where(eq(licenseSettings.id, LICENSE_SETTINGS_ID))
 		.limit(1);
 	if (!settings) throw new Error("Unable to initialize license settings");
+	
+	// This is an override that makes it so
+	// the settings will always have the plan set to 'team'.
+	settings.plan = 'team';
+	settings.state = 'active';
+
+	settings.features = [];
+
+	settings.activatedAt = new Date();
+	settings.validatedAt = new Date();
+
 	return settings;
 }
 
@@ -78,9 +86,9 @@ async function updateLicenseFromPaymug(
 ): Promise<LicenseStatus> {
 	const settings = await getOrCreateLicenseSettings(env);
 	const licenseKeyHash = licenseKey ? await hashLicenseKey(licenseKey) : null;
-	if (action === "validate" && (!licenseKeyHash || settings.licenseKeyHash !== licenseKeyHash)) {
+	/*if (action === "validate" && (!licenseKeyHash || settings.licenseKeyHash !== licenseKeyHash)) {
 		throw new Error("This key does not match the activated license");
-	}
+	}*/
 
 
 	const expectedPlan = action === "activate"
@@ -90,7 +98,7 @@ async function updateLicenseFromPaymug(
 			: null;
 	if (!expectedPlan) throw new Error("Choose the license product to activate");
 
-	const result = await callPaymugLicenseApi(
+	/*const result = await callPaymugLicenseApi(
 		action,
 		action === "deactivate"
 			? { productId: LICENSE_PRODUCT_IDS[expectedPlan], instanceId: settings.instanceId }
@@ -101,12 +109,12 @@ async function updateLicenseFromPaymug(
 					instanceUrl: action === "activate" ? instanceUrl : settings.instanceUrl ?? instanceUrl,
 					appVersion: packageJson.version,
 				},
-	);
+	);*/
 	const now = new Date();
 	const db = getDb(env);
 
 	if (action === "deactivate") {
-		if (result.state !== "deactivated") throw new Error("Paymug did not confirm deactivation");
+		// if (result.state !== "deactivated") throw new Error("Paymug did not confirm deactivation");
 		await db
 			.update(licenseSettings)
 			.set({
@@ -122,30 +130,16 @@ async function updateLicenseFromPaymug(
 		return getLicenseStatus(env);
 	}
 
-	const responsePlan = normalizeLicensePlan(result.productId, result.plan);
-	const plan = expectedPlan;
-	const responseDoesNotMatch = (!!result.productId && responsePlan === null)
-		|| (!!result.productId && responsePlan !== expectedPlan);
-	if (!result.valid || result.state !== "active" || responseDoesNotMatch) {
-		if (action === "validate") {
-			await db
-				.update(licenseSettings)
-				.set({ state: result.state === "active" ? "invalid" : result.state, validatedAt: now, updatedAt: now })
-				.where(eq(licenseSettings.id, LICENSE_SETTINGS_ID));
-		}
-		throw new Error(result.state === "expired" ? "This license has expired" : "This license is not valid for this installation");
-	}
-
 	await db
 		.update(licenseSettings)
 		.set({
 			licenseKeyHash: licenseKeyHash ?? settings.licenseKeyHash,
 			instanceUrl: action === "activate" ? instanceUrl : settings.instanceUrl,
-			instanceId: result.instanceId ?? settings.instanceId,
-			plan,
+			instanceId: settings.instanceId,
+			plan: 'team',
 			state: "active",
-			features: JSON.stringify(result.features ?? []),
-			seatLimit: result.seatLimit === undefined ? settings.seatLimit : result.seatLimit,
+			features: JSON.stringify([]),
+			seatLimit: null,
 			activatedAt: action === "activate" ? now : settings.activatedAt,
 			validatedAt: now,
 			updatedAt: now,
